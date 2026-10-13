@@ -84,3 +84,20 @@ docker compose logs -f db
 ## Current scope
 
 Task 1 provides the application skeleton, health endpoint, container configuration, initial test, API contract, and sample employee data. Database models and employee CRUD endpoints are planned for subsequent tasks.
+
+## Handoff package
+
+- [API Contract](docs/api-contract.md) — documented endpoints, conventions, and implementation status.
+- [Sample Employees](scripts/sample_employees.json) — 10 employee records for development and integration; verify these against the assignment workbook before final handoff.
+
+### Handoff verification
+
+Run the automated tests:
+
+```cmd
+python -m pytest -v
+```
+
+Check the API documentation at http://localhost:8000/docs and verify the health endpoints before handing over the project.
+
+The `handoff-day2` Git tag will be created after the required files, endpoint checks, and tests have been verified.
