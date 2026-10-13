@@ -1,0 +1,102 @@
+[
+  {
+    "employee_id": "EMP-1001",
+    "first_name": "Aarav",
+    "last_name": "Sharma",
+    "work_email": "aarav.sharma@example.com",
+    "department": "Engineering",
+    "job_title": "Software Engineer",
+    "joining_date": "2025-01-13",
+    "is_active": true
+  },
+  {
+    "employee_id": "EMP-1002",
+    "first_name": "Diya",
+    "last_name": "Patel",
+    "work_email": "diya.patel@example.com",
+    "department": "Human Resources",
+    "job_title": "HR Associate",
+    "joining_date": "2024-11-04",
+    "is_active": true
+  },
+  {
+    "employee_id": "EMP-1003",
+    "first_name": "Arjun",
+    "last_name": "Reddy",
+    "work_email": "arjun.reddy@example.com",
+    "department": "Finance",
+    "job_title": "Finance Analyst",
+    "joining_date": "2025-03-17",
+    "is_active": true
+  },
+  {
+    "employee_id": "EMP-1004",
+    "first_name": "Ananya",
+    "last_name": "Iyer",
+    "work_email": "ananya.iyer@example.com",
+    "department": "Engineering",
+    "job_title": "QA Engineer",
+    "joining_date": "2024-08-12",
+    "is_active": true
+  },
+  {
+    "employee_id": "EMP-1005",
+    "first_name": "Kabir",
+    "last_name": "Mehta",
+    "work_email": "kabir.mehta@example.com",
+    "department": "Sales",
+    "job_title": "Sales Executive",
+    "joining_date": "2025-02-10",
+    "is_active": true
+  },
+  {
+    "employee_id": "EMP-1006",
+    "first_name": "Meera",
+    "last_name": "Nair",
+    "work_email": "meera.nair@example.com",
+    "department": "Marketing",
+    "job_title": "Marketing Associate",
+    "joining_date": "2024-10-21",
+    "is_active": true
+  },
+  {
+    "employee_id": "EMP-1007",
+    "first_name": "Ishaan",
+    "last_name": "Verma",
+    "work_email": "ishaan.verma@example.com",
+    "department": "Engineering",
+    "job_title": "Backend Developer",
+    "joining_date": "2025-05-05",
+    "is_active": true
+  },
+  {
+    "employee_id": "EMP-1008",
+    "first_name": "Sara",
+    "last_name": "Khan",
+    "work_email": "sara.khan@example.com",
+    "department": "Human Resources",
+    "job_title": "Recruiter",
+    "joining_date": "2024-09-16",
+    "is_active": true
+  },
+  {
+    "employee_id": "EMP-1009",
+    "first_name": "Vivaan",
+    "last_name": "Das",
+    "work_email": "vivaan.das@example.com",
+    "department": "Operations",
+    "job_title": "Operations Analyst",
+    "joining_date": "2025-04-07",
+    "is_active": true
+  },
+  {
+    "employee_id": "EMP-1010",
+    "first_name": "Aadhya",
+    "last_name": "Rao",
+    "work_email": "aadhya.rao@example.com",
+    "department": "Finance",
+    "job_title": "Accountant",
+    "joining_date": "2024-12-02",
+    "is_active": true
+  }
+]

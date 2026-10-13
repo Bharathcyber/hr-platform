@@ -1,0 +1,6 @@
+fastapi #builds the API
+uvicorn[standard] #runs the API server
+pydantic-settings #pydantic()  
+psycopg[binary]    #postgreSql driver for python,ready for future database integration
+httpx #supports FastAPI test clients
+pytest #runs automated tests
