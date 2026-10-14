@@ -1,3 +1,15 @@
+# Local generated datasets and exports
+data/
+exports/
+
+# Local environment and secrets
+.env.*
+!.env.example
+
+# Python test and tooling artifacts
+.mypy_cache/
+.ruff_cache/
+
 .env
 .venv/
 __pycache__/

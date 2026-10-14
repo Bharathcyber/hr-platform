@@ -1,18 +1,28 @@
-# HR Platform
+# LedgerForge HR Platform
 
-A layered FastAPI backend with PostgreSQL, Docker Compose, environment-based configuration, and automated tests.
+A layered FastAPI backend for HR data management using PostgreSQL, SQLAlchemy, Alembic migrations, Docker Compose, environment-based configuration, and automated tests.
 
 ## Prerequisites
 
 - Git
 - Docker Desktop with the Linux engine running
-- Python 3.12 (for running tests locally)
+- Python 3.12
+- A Python virtual environment
 
 ## Setup
 
 1. Clone the repository or open the project folder.
 2. Copy `.env.example` to `.env`.
-3. Update the local development credentials in `.env` if necessary. Keep `.env` private.
+3. Update the local development credentials in `.env` if necessary.
+4. Keep `.env` private and never commit secrets.
+
+Install dependencies:
+
+```cmd
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+```
 
 ## Start the API and database
 
@@ -20,84 +30,139 @@ A layered FastAPI backend with PostgreSQL, Docker Compose, environment-based con
 docker compose up --build
 ```
 
-Open these URLs:
+Available endpoints:
 
 - API root: http://localhost:8000/
 - Health check: http://localhost:8000/health
 - Interactive API documentation: http://localhost:8000/docs
 
-## Run tests locally
+## Database and migrations
 
-Create a virtual environment with Python 3.12, activate it, and install dependencies:
+The database model includes:
 
-```bash
-python -m venv .venv
-```
+- Departments
+- Roles
+- Employees
+- Employee assignment history
 
-Windows Command Prompt:
+SQLAlchemy models are maintained in `app/models/`. Alembic migration scripts are maintained in `migrations/`.
+
+Useful commands:
 
 ```cmd
-.venv\Scripts\activate
-pip install -r requirements.txt
-pytest -q
+alembic heads
+alembic current
+alembic upgrade head
 ```
 
-## Useful commands
+Apply migrations before running the application against a newly initialized database.
 
-Stop the services:
+## Master dataset
 
-```bash
-docker compose down
+The source workbook is:
+
+`01_LedgerForge_Python_Master_Dataset.xlsx`
+
+The workbook contains the HR master data and related business datasets. The verified source row counts for the core and export sheets are:
+
+| Sheet | Data rows, excluding header |
+|---|---:|
+| departments | 11 |
+| roles | 58 |
+| employees | 745 |
+| employee_assignments | 1,606 |
+| salary_structures | 12,295 |
+| attendance | 150,155 |
+
+## Seed master data
+
+The seed script loads departments and roles from the workbook and uses PostgreSQL upserts so repeated runs update existing master records instead of inserting duplicates.
+
+```cmd
+python -m scripts.seed
 ```
 
-Stop services and remove the development database volume:
+The current seed script seeds **departments and roles only**. It does not load every workbook sheet into PostgreSQL.
 
-```bash
-docker compose down -v
+## Generate additional synthetic employees
+
+The additional employee generator uses Faker with a fixed seed of `2026` to create 50 synthetic employee records.
+
+```cmd
+python -m scripts.extra_fake
 ```
 
-**Warning:** `docker compose down -v` deletes the database's persisted development data.
+Output:
 
-View logs:
+`data/extra_fake_employees.csv`
 
-```bash
-docker compose logs -f api
-docker compose logs -f db
+These records are separate from the master workbook and are not automatically inserted into PostgreSQL.
+
+## Export CSV files
+
+Export the workbook's employee, salary structure, and attendance sheets:
+
+```cmd
+python -m scripts.export_csv
 ```
+
+Output files:
+
+- `exports/employees.csv`
+- `exports/salary_structures.csv`
+- `exports/attendance.csv`
+
+The export script preserves the workbook's column order and writes the sheet data to CSV. The verified output counts are 745, 12,295, and 150,155 data rows, respectively.
+
+## Run tests locally
+
+```cmd
+python -m pytest -v
+```
+
+Run tests after changes to models, migrations, routes, or services. The full test suite has previously passed in this development environment.
 
 ## Project structure
 
-- `app/api/routes/`: HTTP endpoints
-- `app/core/`: settings and shared configuration
-- `app/services/`: business logic
-- `app/models/`: database models
-- `tests/`: automated tests
-- `contracts/`: draft API contract
-- `sample_data/`: synthetic employee data
+- `app/api/routes/` — HTTP endpoints
+- `app/core/` — settings and shared configuration
+- `app/services/` — business logic
+- `app/models/` — SQLAlchemy models
+- `migrations/` — Alembic migration history
+- `scripts/seed.py` — department and role seeding
+- `scripts/extra_fake.py` — reproducible synthetic employee generation
+- `scripts/export_csv.py` — CSV exports from the workbook
+- `tests/` — automated tests
+- `docs/employee-data-model.md` — employee data model diagram
+- `docs/api-contract.md` — API contract
+- `data/` — generated synthetic employee data
+- `exports/` — generated CSV exports
 
 ## Security
 
 - `.env` is excluded from Git.
 - `.env.example` documents required settings without real secrets.
 - Development credentials must be replaced before production use.
+- Never commit passwords, API keys, or production secrets.
 
-## Current scope
+## Important database warning
 
-Task 1 provides the application skeleton, health endpoint, container configuration, initial test, API contract, and sample employee data. Database models and employee CRUD endpoints are planned for subsequent tasks.
+To stop services without deleting persisted database data:
 
-## Handoff package
-
-- [API Contract](docs/api-contract.md) — documented endpoints, conventions, and implementation status.
-- [Sample Employees](scripts/sample_employees.json) — 10 employee records for development and integration; verify these against the assignment workbook before final handoff.
-
-### Handoff verification
-
-Run the automated tests:
-
-```cmd
-python -m pytest -v
+```bash
+docker compose down
 ```
 
-Check the API documentation at http://localhost:8000/docs and verify the health endpoints before handing over the project.
+**Warning:** `docker compose down -v` removes the development database volume and deletes its persisted data. Do not run it unless you intentionally want to remove that data.
 
-The `handoff-day2` Git tag will be created after the required files, endpoint checks, and tests have been verified.
+## Handoff verification
+
+Before handoff:
+
+1. Verify the Alembic migration head and current database revision.
+2. Check the health endpoint and API documentation.
+3. Run the automated tests.
+4. Confirm that the generated CSV files contain the expected row counts.
+5. Review `git status` and ensure no secrets or unwanted generated files are included.
+
+Create a handoff Git tag only after the required files, endpoints, and tests have been verified.
