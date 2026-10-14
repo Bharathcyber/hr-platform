@@ -1,23 +1,16 @@
+
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
 import psycopg
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.core.config import settings
+from app.services import employees as employee_service
+from app.services.employees import DEMO_TODAY
 
 router = APIRouter(prefix="/api/v1/employees", tags=["Employees"])
-
-
-def get_connection():
-    database_url = settings.database_url.replace(
-        "postgresql+psycopg://",
-        "postgresql://",
-        1,
-    )
-    return psycopg.connect(database_url)
 
 
 class EmployeeCreate(BaseModel):
@@ -48,6 +41,28 @@ class EmployeeCreate(BaseModel):
     exit_type: Optional[str] = None
     exit_reason: Optional[str] = None
 
+    @field_validator("first_name", "last_name", "full_name", "employment_status")
+    @classmethod
+    def reject_blank_text(cls, value):
+        if not value.strip():
+            raise ValueError("This field cannot be blank.")
+        return value.strip()
+
+    @field_validator("hire_date")
+    @classmethod
+    def validate_hire_date(cls, value):
+        if value is not None and value > DEMO_TODAY:
+            raise ValueError("Hire date cannot be after DEMO_TODAY.")
+        return value
+
+    @field_validator("exit_date")
+    @classmethod
+    def validate_exit_date(cls, value, info):
+        hire_date = info.data.get("hire_date")
+        if value is not None and hire_date is not None and value < hire_date:
+            raise ValueError("Exit date cannot be before hire date.")
+        return value
+
 
 class EmployeeUpdate(BaseModel):
     first_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
@@ -76,6 +91,20 @@ class EmployeeUpdate(BaseModel):
     exit_type: Optional[str] = None
     exit_reason: Optional[str] = None
 
+    @field_validator("first_name", "last_name", "full_name", "employment_status")
+    @classmethod
+    def reject_blank_text(cls, value):
+        if value is not None and not value.strip():
+            raise ValueError("This field cannot be blank.")
+        return value.strip() if value is not None else value
+
+    @field_validator("hire_date")
+    @classmethod
+    def validate_hire_date(cls, value):
+        if value is not None and value > DEMO_TODAY:
+            raise ValueError("Hire date cannot be after DEMO_TODAY.")
+        return value
+
 
 def serialize_employee(row):
     result = dict(row)
@@ -87,43 +116,53 @@ def serialize_employee(row):
     return result
 
 
+def get_connection():
+    from app.core.config import settings
+
+    database_url = settings.database_url.replace(
+        "postgresql+psycopg://", "postgresql://", 1
+    )
+    return psycopg.connect(database_url)
+
+
 @router.get("")
 def list_employees(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    department_id: Optional[str] = None,
+    role_id: Optional[str] = None,
+    employment_status: Optional[str] = None,
+    work_location: Optional[str] = None,
+    work_mode: Optional[str] = None,
+    manager_id: Optional[str] = None,
+    hire_date_from: Optional[date] = None,
+    hire_date_to: Optional[date] = None,
+    q: Optional[str] = None,
 ):
-    try:
-        with get_connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT *
-                    FROM employees
-                    ORDER BY employee_id
-                    LIMIT %s OFFSET %s
-                    """,
-                    (limit, offset),
-                )
-                rows = cursor.fetchall()
-                columns = [item.name for item in cursor.description]
-
-        employees = [
-            serialize_employee(dict(zip(columns, row)))
-            for row in rows
-        ]
-
-        return {
-            "count": len(employees),
-            "limit": limit,
-            "offset": offset,
-            "employees": employees,
-        }
-
-    except psycopg.Error:
+    if hire_date_from and hire_date_to and hire_date_from > hire_date_to:
         raise HTTPException(
-            status_code=503,
-            detail="Unable to retrieve employees from the database.",
+            status_code=422,
+            detail="hire_date_from cannot be after hire_date_to.",
         )
+
+    return employee_service.list_employees(
+        limit=limit,
+        offset=offset,
+        department_id=department_id,
+        role_id=role_id,
+        employment_status=employment_status,
+        work_location=work_location,
+        work_mode=work_mode,
+        manager_id=manager_id,
+        hire_date_from=hire_date_from,
+        hire_date_to=hire_date_to,
+        q=q,
+    )
+
+
+@router.get("/team/{manager_id}")
+def get_team(manager_id: str):
+    return employee_service.get_direct_reports(manager_id)
 
 
 @router.get("/{employee_id}")
@@ -132,152 +171,90 @@ def get_employee(employee_id: str):
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT * FROM employees WHERE employee_id = %s",
+                    """
+                    SELECT * FROM employees
+                    WHERE employee_id = %s AND is_active = TRUE
+                    """,
                     (employee_id,),
                 )
                 row = cursor.fetchone()
-
                 if row is None:
-                    raise HTTPException(
-                        status_code=404,
-                        detail="Employee not found.",
-                    )
-
+                    raise HTTPException(404, "Active employee not found.")
                 columns = [item.name for item in cursor.description]
-                employee = dict(zip(columns, row))
-
-        return serialize_employee(employee)
-
-    except psycopg.Error:
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to retrieve employee from the database.",
-        )
+        return serialize_employee(dict(zip(columns, row)))
+    except HTTPException:
+        raise
+    except psycopg.Error as exc:
+        raise HTTPException(503, "Unable to retrieve employee.") from exc
 
 
 @router.post("", status_code=201)
 def create_employee(employee: EmployeeCreate):
     data = employee.model_dump(mode="json")
-    columns = list(data.keys())
-    column_sql = ", ".join(columns)
-    placeholders = ", ".join(["%s"] * len(columns))
-
+    columns = list(data)
     query = (
-        f"INSERT INTO employees ({column_sql}) "
-        f"VALUES ({placeholders}) "
-        "RETURNING *"
+        f"INSERT INTO employees ({', '.join(columns)}) "
+        f"VALUES ({', '.join(['%s'] * len(columns))}) RETURNING *"
     )
-
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    query,
-                    [data[column] for column in columns],
-                )
+                cursor.execute(query, [data[column] for column in columns])
                 row = cursor.fetchone()
-                result_columns = [
-                    item.name for item in cursor.description
-                ]
-                result = dict(zip(result_columns, row))
-
+                result = dict(zip([item.name for item in cursor.description], row))
         return serialize_employee(result)
-
-    except psycopg.errors.UniqueViolation:
-        raise HTTPException(
-            status_code=409,
-            detail="Employee ID or work email already exists.",
-        )
-    except psycopg.Error:
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to create employee in the database.",
-        )
+    except psycopg.errors.UniqueViolation as exc:
+        raise HTTPException(409, "Employee ID or work email already exists.") from exc
+    except psycopg.errors.ForeignKeyViolation as exc:
+        raise HTTPException(422, "Department, role, or manager reference does not exist.") from exc
+    except psycopg.Error as exc:
+        raise HTTPException(503, "Unable to create employee.") from exc
 
 
 @router.put("/{employee_id}")
 def update_employee(employee_id: str, employee: EmployeeUpdate):
-    updates = employee.model_dump(
-        exclude_unset=True,
-        mode="json",
-    )
-
+    updates = employee.model_dump(exclude_unset=True, mode="json")
     if not updates:
-        raise HTTPException(
-            status_code=400,
-            detail="Provide at least one field to update.",
-        )
-
-    set_clause = ", ".join(
-        f"{column} = %s" for column in updates
-    )
-
-    query = (
-        f"UPDATE employees SET {set_clause} "
-        "WHERE employee_id = %s "
-        "RETURNING *"
-    )
+        raise HTTPException(400, "Provide at least one field to update.")
 
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    query,
+                    "SELECT hire_date, exit_date FROM employees "
+                    "WHERE employee_id = %s AND is_active = TRUE",
+                    (employee_id,),
+                )
+                existing = cursor.fetchone()
+                if existing is None:
+                    raise HTTPException(404, "Active employee not found.")
+
+                hire_date = updates.get("hire_date", existing[0])
+                exit_date = updates.get("exit_date", existing[1])
+                if hire_date is not None and hire_date > DEMO_TODAY:
+                    raise HTTPException(422, "Hire date cannot be after DEMO_TODAY.")
+                if exit_date is not None and hire_date is not None and exit_date < hire_date:
+                    raise HTTPException(422, "Exit date cannot be before hire date.")
+
+                set_clause = ", ".join(f"{column} = %s" for column in updates)
+                cursor.execute(
+                    f"UPDATE employees SET {set_clause}, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE employee_id = %s AND is_active = TRUE RETURNING *",
                     [*updates.values(), employee_id],
                 )
                 row = cursor.fetchone()
-
-                if row is None:
-                    raise HTTPException(
-                        status_code=404,
-                        detail="Employee not found.",
-                    )
-
-                columns = [item.name for item in cursor.description]
-                result = dict(zip(columns, row))
-
+                result = dict(zip([item.name for item in cursor.description], row))
         return serialize_employee(result)
-
-    except psycopg.errors.UniqueViolation:
-        raise HTTPException(
-            status_code=409,
-            detail="Work email already belongs to another employee.",
-        )
-    except psycopg.Error:
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to update employee in the database.",
-        )
+    except HTTPException:
+        raise
+    except psycopg.errors.UniqueViolation as exc:
+        raise HTTPException(409, "Work email already belongs to another employee.") from exc
+    except psycopg.errors.ForeignKeyViolation as exc:
+        raise HTTPException(422, "Department, role, or manager reference does not exist.") from exc
+    except psycopg.Error as exc:
+        raise HTTPException(503, "Unable to update employee.") from exc
 
 
 @router.delete("/{employee_id}")
 def delete_employee(employee_id: str):
-    try:
-        with get_connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    DELETE FROM employees
-                    WHERE employee_id = %s
-                    RETURNING employee_id
-                    """,
-                    (employee_id,),
-                )
-                deleted = cursor.fetchone()
-
-                if deleted is None:
-                    raise HTTPException(
-                        status_code=404,
-                        detail="Employee not found.",
-                    )
-
-        return {
-            "message": "Employee deleted successfully.",
-            "employee_id": deleted[0],
-        }
-
-    except psycopg.Error:
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to delete employee from the database.",
-        )
+    return employee_service.soft_delete_employee(employee_id)
