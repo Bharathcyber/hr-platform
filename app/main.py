@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.api.routes.health import router as health_router
+from app.api.routes.employees import router as employees_router
 
 app = FastAPI(
     title="HR Platform API",
@@ -9,6 +10,7 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(employees_router)
 
 
 @app.get("/", tags=["Root"])
