@@ -1,11 +1,18 @@
 
+import argparse
 import csv
 from pathlib import Path
 
 from openpyxl import load_workbook
 
+
 BASE_DIR = Path(__file__).resolve().parent.parent
-WORKBOOK_PATH = BASE_DIR / "data" / "seed" / "01_LedgerForge_Python_Master_Dataset.xlsx"
+WORKBOOK_PATH = (
+    BASE_DIR
+    / "data"
+    / "seed"
+    / "01_LedgerForge_Python_Master_Dataset.xlsx"
+)
 EXPORT_DIR = BASE_DIR / "exports"
 
 SHEETS_TO_EXPORT = [
@@ -29,7 +36,9 @@ def export_sheet(workbook, sheet_name):
     data_count = 0
 
     with output_path.open(
-        "w", newline="", encoding="utf-8-sig"
+        "w",
+        newline="",
+        encoding="utf-8-sig",
     ) as file:
         writer = csv.writer(file)
         writer.writerow(headers)
@@ -51,8 +60,15 @@ def export_sheet(workbook, sheet_name):
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Export selected LedgerForge workbook sheets to CSV."
+    )
+    parser.parse_args()
+
     if not WORKBOOK_PATH.is_file():
-        raise FileNotFoundError(f"Workbook not found: {WORKBOOK_PATH}")
+        raise FileNotFoundError(
+            f"Workbook not found: {WORKBOOK_PATH}"
+        )
 
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -61,6 +77,7 @@ def main():
         read_only=True,
         data_only=True,
     )
+
     try:
         for sheet_name in SHEETS_TO_EXPORT:
             if sheet_name not in workbook.sheetnames:
