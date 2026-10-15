@@ -1,9 +1,12 @@
-fastapi #builds the API
-uvicorn[standard] #runs the API server
-pydantic-settings #pydantic()  
-psycopg[binary]    #postgreSql driver for python,ready for future database integration
-httpx #supports FastAPI test clients
-pytest #runs automated tests
-email-validator  #the pydantic use email str,requires to email validator package
+fastapi
+uvicorn[standard]
+pydantic-settings
+psycopg[binary]
+httpx
+pytest
+email-validator
 SQLAlchemy>=2.0,<3.0
-alembic>=1.14,<2.0Faker
+alembic>=1.14,<2.0
+Faker
+pandas
+openpyxl

@@ -1,47 +1,62 @@
 # HR Platform — API Contract
 
-**Version:** 0.1.0  
-**Status:** Draft for team integration
+**Version:** 0.2.0
+**Status:** Phase 1 implementation; authentication and remaining endpoints pending
 
 **Base URL:** `http://localhost:8000`
 
-## 1. Health and service information
+## 1. Service and health endpoints
 
-| Method | Endpoint | Purpose | Status |
+| Method | Endpoint | Status | Purpose |
 |---|---|---|---|
-| GET | `/` | API welcome message | Available |
-| GET | `/health` | Backward-compatible health check | Available |
-| GET | `/api/v1/health` | Versioned service and dependency health information | To be implemented and tested |
+| GET | `/` | Implemented | API welcome message |
+| GET | `/health` | Implemented | Backward-compatible health check |
+| GET | `/api/v1/health` | Implemented | Versioned service and dependency health |
 
-The versioned health endpoint should report the service name, application version, and health of configured dependencies. Dependency checks must reflect actual check results rather than assume that a dependency is healthy.
+The versioned health endpoint reports the service name, version, overall status, and database, Redis, and worker checks. A dependency that is not configured must not be reported as healthy.
 
-## 2. Employee and department endpoints
+## 2. Employee endpoints
 
-| Method | Endpoint | Purpose | Status |
+All employee routes use the `/api/v1/employees` prefix.
+
+| Method | Endpoint | Status | Purpose |
 |---|---|---|---|
-| POST | `/employees` | Create an employee | Planned — Task 3 |
-| GET | `/employees` | List, search, filter, and paginate employees | Planned — Task 3 |
-| GET | `/employees/{id}` | Retrieve an employee | Planned — Task 3 |
-| PATCH | `/employees/{id}` | Update an employee | Planned — Task 3 |
-| DELETE | `/employees/{id}` | Deactivate an employee (soft delete) | Planned — Task 3 |
-| GET | `/departments` | List departments | Planned — Task 3 |
-| GET | `/departments/{id}/employees` | List employees in a department | Planned — Task 3 |
-| GET | `/employees/{id}/team` | Retrieve direct reports | Planned — Task 3 |
+| GET | `/api/v1/employees` | Implemented | List employees with pagination and filters |
+| GET | `/api/v1/employees/{employee_id}` | Implemented | Retrieve an employee |
+| GET | `/api/v1/employees/team/{manager_id}` | Implemented | Retrieve a manager's direct reports |
+| POST | `/api/v1/employees` | Implemented | Create an employee |
+| PUT | `/api/v1/employees/{employee_id}` | Implemented | Update an employee |
+| DELETE | `/api/v1/employees/{employee_id}` | Implemented | Deactivate an employee |
 
-## 3. API conventions
+The list endpoint supports `limit`, `offset`, `department_id`, `role_id`, `employment_status`, `work_location`, `work_mode`, `manager_id`, hire-date range filters, and text search where implemented by the route.
+
+The update endpoint requires at least one field. Employee creation returns HTTP 201. Duplicate employee IDs or work email addresses return HTTP 409. Invalid references can return HTTP 422. Deletion is intended to deactivate an employee rather than permanently remove the record.
+
+## 3. Other planned endpoints
+
+| Method | Endpoint | Status | Purpose |
+|---|---|---|---|
+| GET | `/api/v1/departments` | Planned | List departments |
+| GET | `/api/v1/departments/{id}/employees` | Planned | List employees in a department |
+
+Do not treat planned endpoints as implemented until their routes and tests exist.
+
+## 4. Request and response conventions
 
 - Use JSON request and response bodies.
 - Use appropriate HTTP status codes.
-- Generate employee IDs on the server.
-- Require unique employee work email addresses.
-- Support pagination on list endpoints.
-- Finalize the employee schema during Tasks 2 and 3.
-- Document authentication and authorization requirements when those features are implemented.
+- Validate email addresses, required text, numeric ranges, and date values.
+- Enforce unique employee IDs and work email addresses.
+- Use pagination for employee list requests.
+- Return clear error messages without exposing secrets or internal database details.
+- Keep business rules in the service layer where applicable.
 
+## 5. Authentication and authorization
 
+Authentication and role-based authorization are not yet documented as implemented. Do not assume these routes are protected until authentication and authorization middleware or dependencies are configured and tested.
 
-## 4. Implementation notes
+## 6. Dependency health and limitations
 
-This document describes the intended API contract. Planned endpoints must not be treated as implemented until their corresponding functionality and tests are complete.
+The database check attempts a real PostgreSQL connection. Redis and background-worker checks currently report `not_configured` because those integrations are not configured in this project. The overall health status therefore remains `degraded` until all required checks report healthy.
 
-Database, Redis, and background-worker health checks must be integrated with the actual configured services before reporting them as healthy.
+This contract documents the current Phase 1 implementation and distinguishes it from planned functionality. Update it alongside future API changes and tests.

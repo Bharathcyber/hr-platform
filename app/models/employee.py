@@ -76,8 +76,8 @@ class Employee(Base):
     work_mode: Mapped[str | None] = mapped_column(String(30))
     highest_education: Mapped[str | None] = mapped_column(String(150))
 
-    prior_experience_years: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
+    prior_experience_years: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, server_default=text("0")
     )
     career_gap_months: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")

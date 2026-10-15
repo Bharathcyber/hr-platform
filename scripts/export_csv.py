@@ -5,7 +5,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-WORKBOOK_PATH = BASE_DIR / "01_LedgerForge_Python_Master_Dataset.xlsx"
+WORKBOOK_PATH = BASE_DIR / "data" / "seed" / "01_LedgerForge_Python_Master_Dataset.xlsx"
 EXPORT_DIR = BASE_DIR / "exports"
 
 SHEETS_TO_EXPORT = [

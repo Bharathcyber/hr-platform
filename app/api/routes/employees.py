@@ -1,3 +1,4 @@
+
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
@@ -7,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.services import employees as employee_service
+from app.services.employees import DEMO_TODAY
 
 
 router = APIRouter(prefix="/api/v1/employees", tags=["Employees"])
@@ -30,7 +32,7 @@ class EmployeeCreate(BaseModel):
     work_location: Optional[str] = None
     work_mode: Optional[str] = None
     highest_education: Optional[str] = None
-    prior_experience_years: int = Field(default=0, ge=0)
+    prior_experience_years: Decimal = Field(default=Decimal("0"), ge=0)
     career_gap_months: int = Field(default=0, ge=0)
     commute_distance_km: Optional[Decimal] = None
     pf_applicable: Optional[str] = Field(default=None, pattern="^[YN]$")
@@ -40,17 +42,17 @@ class EmployeeCreate(BaseModel):
     exit_type: Optional[str] = None
     exit_reason: Optional[str] = None
 
-    @field_validator(
-        "first_name",
-        "last_name",
-        "full_name",
-        "employment_status",
-    )
+    @field_validator("first_name", "last_name", "full_name", "employment_status")
     @classmethod
     def reject_blank_text(cls, value):
         if not value.strip():
             raise ValueError("This field cannot be blank.")
         return value.strip()
+
+    @field_validator("hire_date", "exit_date")
+    @classmethod
+    def validate_dates(cls, value):
+        return value
 
 
 class EmployeeUpdate(BaseModel):
@@ -70,7 +72,7 @@ class EmployeeUpdate(BaseModel):
     work_location: Optional[str] = None
     work_mode: Optional[str] = None
     highest_education: Optional[str] = None
-    prior_experience_years: Optional[int] = Field(default=None, ge=0)
+    prior_experience_years: Optional[Decimal] = Field(default=None, ge=0)
     career_gap_months: Optional[int] = Field(default=None, ge=0)
     commute_distance_km: Optional[Decimal] = None
     pf_applicable: Optional[str] = Field(default=None, pattern="^[YN]$")
@@ -80,12 +82,7 @@ class EmployeeUpdate(BaseModel):
     exit_type: Optional[str] = None
     exit_reason: Optional[str] = None
 
-    @field_validator(
-        "first_name",
-        "last_name",
-        "full_name",
-        "employment_status",
-    )
+    @field_validator("first_name", "last_name", "full_name", "employment_status")
     @classmethod
     def reject_blank_text(cls, value):
         if value is not None and not value.strip():
@@ -202,10 +199,7 @@ def create_employee(employee: EmployeeCreate):
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    query,
-                    [data[column] for column in columns],
-                )
+                cursor.execute(query, [data[column] for column in columns])
                 row = cursor.fetchone()
                 result = dict(
                     zip([item.name for item in cursor.description], row)
@@ -271,17 +265,6 @@ def update_employee(employee_id: str, employee: EmployeeUpdate):
                     hire_date,
                     exit_date,
                 )
-
-                # Send actual date objects to PostgreSQL.
-                if "hire_date" in updates and updates["hire_date"] is not None:
-                    updates["hire_date"] = date.fromisoformat(
-                        updates["hire_date"]
-                    )
-
-                if "exit_date" in updates and updates["exit_date"] is not None:
-                    updates["exit_date"] = date.fromisoformat(
-                        updates["exit_date"]
-                    )
 
                 set_clause = ", ".join(
                     f"{column} = %s" for column in updates

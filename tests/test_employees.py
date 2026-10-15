@@ -1,5 +1,6 @@
 
 from datetime import date
+import uuid
 
 import pytest
 from fastapi import HTTPException
@@ -98,12 +99,15 @@ def test_get_missing_employee():
 
 
 def test_create_update_and_soft_delete_employee():
+    suffix = uuid.uuid4().hex[:10]
+    employee_id = f"EMP-T-{suffix}"
+
     payload = {
-        "employee_id": "EMP-AUTO-TEST-901",
+        "employee_id": employee_id,
         "first_name": "Automated",
         "last_name": "Tester",
         "full_name": "Automated Tester",
-        "work_email": "automated.tester.901@znova-demo.example",
+        "work_email": f"automated.tester.{suffix}@znova-demo.example",
         "employment_status": "Active",
     }
 
@@ -112,15 +116,15 @@ def test_create_update_and_soft_delete_employee():
         json=payload,
     )
 
-    assert create_response.status_code == 201
-
-    employee_id = payload["employee_id"]
+    # If creation fails, do not run cleanup against any existing row.
+    assert create_response.status_code == 201, create_response.text
 
     try:
         get_response = client.get(
             f"/api/v1/employees/{employee_id}"
         )
         assert get_response.status_code == 200
+        assert get_response.json()["employee_id"] == employee_id
 
         update_response = client.put(
             f"/api/v1/employees/{employee_id}",
@@ -143,8 +147,8 @@ def test_create_update_and_soft_delete_employee():
         assert inactive_response.status_code == 404
 
     finally:
-        # Preserve soft-delete semantics; never physically delete the row.
-        # If an assertion fails before deletion, attempt normal soft deletion.
+        # Keep soft-delete semantics; never physically delete the row.
+        # This ID was generated for this test run.
         client.delete(f"/api/v1/employees/{employee_id}")
 
 
@@ -154,7 +158,7 @@ def test_duplicate_employee_id():
         "first_name": "Duplicate",
         "last_name": "Tester",
         "full_name": "Duplicate Tester",
-        "work_email": "unique.duplicate.tester@znova-demo.example",
+        "work_email": f"duplicate.{uuid.uuid4().hex[:10]}@znova-demo.example",
         "employment_status": "Active",
     }
 
@@ -167,8 +171,9 @@ def test_duplicate_employee_id():
 
 
 def test_invalid_email():
+    suffix = uuid.uuid4().hex[:10]
     payload = {
-        "employee_id": "EMP-AUTO-TEST-902",
+        "employee_id": f"EMP-I-{suffix}",
         "first_name": "Invalid",
         "last_name": "Email",
         "full_name": "Invalid Email",
@@ -185,14 +190,15 @@ def test_invalid_email():
 
 
 def test_create_employee_with_future_hire_date_is_rejected():
+    suffix = uuid.uuid4().hex[:10]
     payload = {
-        "employee_id": "EMP-AUTO-FUTURE-903",
+        "employee_id": f"EMP-F-{suffix}",
         "first_name": "Future",
         "last_name": "Hire",
         "full_name": "Future Hire",
-        "work_email": "future.hire.903@example.com",
+        "work_email": f"future.hire.{suffix}@example.com",
         "employment_status": "Active",
-        "hire_date": "2026-10-01",
+        "hire_date": "2026-10-16",
     }
 
     response = client.post("/api/v1/employees", json=payload)
@@ -201,12 +207,13 @@ def test_create_employee_with_future_hire_date_is_rejected():
 
 
 def test_create_employee_with_blank_name_is_rejected():
+    suffix = uuid.uuid4().hex[:10]
     payload = {
-        "employee_id": "EMP-AUTO-BLANK-904",
+        "employee_id": f"EMP-B-{suffix}",
         "first_name": " ",
         "last_name": "Tester",
         "full_name": "Blank Tester",
-        "work_email": "blank.name.904@example.com",
+        "work_email": f"blank.name.{suffix}@example.com",
         "employment_status": "Active",
     }
 
@@ -224,7 +231,7 @@ def test_valid_employee_dates():
 
 def test_future_hire_date_is_rejected():
     with pytest.raises(HTTPException) as exc_info:
-        validate_employee_dates(date(2026, 10, 1), None)
+        validate_employee_dates(date(2026, 10, 16), None)
 
     assert exc_info.value.status_code == 422
 

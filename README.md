@@ -34,6 +34,7 @@ Available endpoints:
 
 - API root: http://localhost:8000/
 - Health check: http://localhost:8000/health
+- Versioned health check: http://localhost:8000/api/v1/health
 - Interactive API documentation: http://localhost:8000/docs
 
 ## Database and migrations
@@ -44,15 +45,16 @@ The database model includes:
 - Roles
 - Employees
 - Employee assignment history
+- User and HR reference models
 
 SQLAlchemy models are maintained in `app/models/`. Alembic migration scripts are maintained in `migrations/`.
 
 Useful commands:
 
 ```cmd
-alembic heads
-alembic current
-alembic upgrade head
+python -m alembic heads
+python -m alembic current
+python -m alembic upgrade head
 ```
 
 Apply migrations before running the application against a newly initialized database.
@@ -76,13 +78,21 @@ The workbook contains the HR master data and related business datasets. The veri
 
 ## Seed master data
 
-The seed script loads departments and roles from the workbook and uses PostgreSQL upserts so repeated runs update existing master records instead of inserting duplicates.
+The seed script loads and validates workbook data and supports a dry-run mode before writing to the database.
+
+Preview the seed operation:
+
+```cmd
+python -m scripts.seed --dry-run
+```
+
+Run the seed operation:
 
 ```cmd
 python -m scripts.seed
 ```
 
-The current seed script seeds **departments and roles only**. It does not load every workbook sheet into PostgreSQL.
+The seed process covers the configured department, role, employee, employee assignment, user, salary component, holiday, and leave-type data. Review the seed output and database counts after running it. Do not reset or delete existing database records merely to match workbook counts.
 
 ## Generate additional synthetic employees
 
@@ -112,7 +122,7 @@ Output files:
 - `exports/salary_structures.csv`
 - `exports/attendance.csv`
 
-The export script preserves the workbook's column order and writes the sheet data to CSV. The verified output counts are 745, 12,295, and 150,155 data rows, respectively.
+The export script preserves the workbook's column order. The verified output counts are 745, 12,295, and 150,155 data rows, respectively.
 
 ## Run tests locally
 
@@ -120,7 +130,13 @@ The export script preserves the workbook's column order and writes the sheet dat
 python -m pytest -v
 ```
 
-Run tests after changes to models, migrations, routes, or services. The full test suite has previously passed in this development environment.
+For the focused employee and health test suites:
+
+```cmd
+python -m pytest tests\test_employees.py tests\test_health.py -q
+```
+
+Run tests after changes to models, migrations, routes, or services. Record the actual test result for the version being handed off.
 
 ## Project structure
 
@@ -129,15 +145,33 @@ Run tests after changes to models, migrations, routes, or services. The full tes
 - `app/services/` — business logic
 - `app/models/` — SQLAlchemy models
 - `migrations/` — Alembic migration history
-- `scripts/seed.py` — department and role seeding
+- `scripts/seed.py` — workbook validation and database seeding
 - `scripts/extra_fake.py` — reproducible synthetic employee generation
 - `scripts/export_csv.py` — CSV exports from the workbook
+- `scripts/sample_employees.json` — 10 sample employee records for handoff
 - `tests/` — automated tests
 - `docs/employee-data-model.md` — employee data model diagram
 - `docs/api-contract.md` — API contract
--- `scripts/sample_employees.json` — sample employee data
 - `data/` — generated synthetic employee data
 - `exports/` — generated CSV exports
+
+## Handoff package
+
+The Phase 1 handoff files are available here:
+
+- [API contract](docs/api-contract.md) — documents implemented endpoints and distinguishes planned functionality.
+- [Sample employee data](scripts/sample_employees.json) — valid JSON containing 10 sample employee records.
+
+### Handoff verification
+
+Before releasing a handoff:
+
+1. Verify the Alembic current revision matches the migration head.
+2. Verify the health endpoint and API documentation.
+3. Run the automated tests and record the results.
+4. Confirm the expected CSV row counts.
+5. Review Git changes and exclude secrets, local datasets, and backup files.
+6. Confirm the handoff tag points to the intended commit and publish it only after the required checks pass.
 
 ## Security
 
@@ -155,15 +189,3 @@ docker compose down
 ```
 
 **Warning:** `docker compose down -v` removes the development database volume and deletes its persisted data. Do not run it unless you intentionally want to remove that data.
-
-## Handoff verification
-
-Before handoff:
-
-1. Verify the Alembic migration head and current database revision.
-2. Check the health endpoint and API documentation.
-3. Run the automated tests.
-4. Confirm that the generated CSV files contain the expected row counts.
-5. Review `git status` and ensure no secrets or unwanted generated files are included.
-
-Create a handoff Git tag only after the required files, endpoints, and tests have been verified.

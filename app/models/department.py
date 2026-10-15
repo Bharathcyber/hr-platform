@@ -24,6 +24,8 @@ class Department(Base):
     employees: Mapped[list["Employee"]] = relationship(
         back_populates="department",
         foreign_keys="Employee.department_id",
+        primaryjoin="Department.department_id == Employee.department_id",
+        viewonly=True,
     )
     roles: Mapped[list["Role"]] = relationship(
         back_populates="department"
