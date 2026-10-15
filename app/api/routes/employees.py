@@ -1,4 +1,3 @@
-
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
@@ -8,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.services import employees as employee_service
-from app.services.employees import DEMO_TODAY
+
 
 router = APIRouter(prefix="/api/v1/employees", tags=["Employees"])
 
@@ -41,27 +40,17 @@ class EmployeeCreate(BaseModel):
     exit_type: Optional[str] = None
     exit_reason: Optional[str] = None
 
-    @field_validator("first_name", "last_name", "full_name", "employment_status")
+    @field_validator(
+        "first_name",
+        "last_name",
+        "full_name",
+        "employment_status",
+    )
     @classmethod
     def reject_blank_text(cls, value):
         if not value.strip():
             raise ValueError("This field cannot be blank.")
         return value.strip()
-
-    @field_validator("hire_date")
-    @classmethod
-    def validate_hire_date(cls, value):
-        if value is not None and value > DEMO_TODAY:
-            raise ValueError("Hire date cannot be after DEMO_TODAY.")
-        return value
-
-    @field_validator("exit_date")
-    @classmethod
-    def validate_exit_date(cls, value, info):
-        hire_date = info.data.get("hire_date")
-        if value is not None and hire_date is not None and value < hire_date:
-            raise ValueError("Exit date cannot be before hire date.")
-        return value
 
 
 class EmployeeUpdate(BaseModel):
@@ -91,28 +80,28 @@ class EmployeeUpdate(BaseModel):
     exit_type: Optional[str] = None
     exit_reason: Optional[str] = None
 
-    @field_validator("first_name", "last_name", "full_name", "employment_status")
+    @field_validator(
+        "first_name",
+        "last_name",
+        "full_name",
+        "employment_status",
+    )
     @classmethod
     def reject_blank_text(cls, value):
         if value is not None and not value.strip():
             raise ValueError("This field cannot be blank.")
         return value.strip() if value is not None else value
 
-    @field_validator("hire_date")
-    @classmethod
-    def validate_hire_date(cls, value):
-        if value is not None and value > DEMO_TODAY:
-            raise ValueError("Hire date cannot be after DEMO_TODAY.")
-        return value
-
 
 def serialize_employee(row):
     result = dict(row)
+
     for key, value in result.items():
         if isinstance(value, (date, datetime)):
             result[key] = value.isoformat()
         elif isinstance(value, Decimal):
             result[key] = float(value)
+
     return result
 
 
@@ -120,7 +109,9 @@ def get_connection():
     from app.core.config import settings
 
     database_url = settings.database_url.replace(
-        "postgresql+psycopg://", "postgresql://", 1
+        "postgresql+psycopg://",
+        "postgresql://",
+        1,
     )
     return psycopg.connect(database_url)
 
@@ -139,12 +130,6 @@ def list_employees(
     hire_date_to: Optional[date] = None,
     q: Optional[str] = None,
 ):
-    if hire_date_from and hire_date_to and hire_date_from > hire_date_to:
-        raise HTTPException(
-            status_code=422,
-            detail="hire_date_from cannot be after hire_date_to.",
-        )
-
     return employee_service.list_employees(
         limit=limit,
         offset=offset,
@@ -172,87 +157,170 @@ def get_employee(employee_id: str):
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT * FROM employees
+                    SELECT *
+                    FROM employees
                     WHERE employee_id = %s AND is_active = TRUE
                     """,
                     (employee_id,),
                 )
                 row = cursor.fetchone()
+
                 if row is None:
-                    raise HTTPException(404, "Active employee not found.")
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Active employee not found.",
+                    )
+
                 columns = [item.name for item in cursor.description]
+
         return serialize_employee(dict(zip(columns, row)))
+
     except HTTPException:
         raise
     except psycopg.Error as exc:
-        raise HTTPException(503, "Unable to retrieve employee.") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to retrieve employee.",
+        ) from exc
 
 
 @router.post("", status_code=201)
 def create_employee(employee: EmployeeCreate):
+    employee_service.validate_employee_dates(
+        employee.hire_date,
+        employee.exit_date,
+    )
+
     data = employee.model_dump(mode="json")
     columns = list(data)
+
     query = (
         f"INSERT INTO employees ({', '.join(columns)}) "
         f"VALUES ({', '.join(['%s'] * len(columns))}) RETURNING *"
     )
+
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(query, [data[column] for column in columns])
+                cursor.execute(
+                    query,
+                    [data[column] for column in columns],
+                )
                 row = cursor.fetchone()
-                result = dict(zip([item.name for item in cursor.description], row))
+                result = dict(
+                    zip([item.name for item in cursor.description], row)
+                )
+
         return serialize_employee(result)
+
     except psycopg.errors.UniqueViolation as exc:
-        raise HTTPException(409, "Employee ID or work email already exists.") from exc
+        raise HTTPException(
+            status_code=409,
+            detail="Employee ID or work email already exists.",
+        ) from exc
     except psycopg.errors.ForeignKeyViolation as exc:
-        raise HTTPException(422, "Department, role, or manager reference does not exist.") from exc
+        raise HTTPException(
+            status_code=422,
+            detail="Department, role, or manager reference does not exist.",
+        ) from exc
     except psycopg.Error as exc:
-        raise HTTPException(503, "Unable to create employee.") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to create employee.",
+        ) from exc
 
 
 @router.put("/{employee_id}")
 def update_employee(employee_id: str, employee: EmployeeUpdate):
     updates = employee.model_dump(exclude_unset=True, mode="json")
+
     if not updates:
-        raise HTTPException(400, "Provide at least one field to update.")
+        raise HTTPException(
+            status_code=400,
+            detail="Provide at least one field to update.",
+        )
 
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT hire_date, exit_date FROM employees "
-                    "WHERE employee_id = %s AND is_active = TRUE",
+                    """
+                    SELECT hire_date, exit_date
+                    FROM employees
+                    WHERE employee_id = %s AND is_active = TRUE
+                    """,
                     (employee_id,),
                 )
                 existing = cursor.fetchone()
+
                 if existing is None:
-                    raise HTTPException(404, "Active employee not found.")
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Active employee not found.",
+                    )
 
                 hire_date = updates.get("hire_date", existing[0])
                 exit_date = updates.get("exit_date", existing[1])
-                if hire_date is not None and hire_date > DEMO_TODAY:
-                    raise HTTPException(422, "Hire date cannot be after DEMO_TODAY.")
-                if exit_date is not None and hire_date is not None and exit_date < hire_date:
-                    raise HTTPException(422, "Exit date cannot be before hire date.")
 
-                set_clause = ", ".join(f"{column} = %s" for column in updates)
+                if isinstance(hire_date, str):
+                    hire_date = date.fromisoformat(hire_date)
+                if isinstance(exit_date, str):
+                    exit_date = date.fromisoformat(exit_date)
+
+                employee_service.validate_employee_dates(
+                    hire_date,
+                    exit_date,
+                )
+
+                # Send actual date objects to PostgreSQL.
+                if "hire_date" in updates and updates["hire_date"] is not None:
+                    updates["hire_date"] = date.fromisoformat(
+                        updates["hire_date"]
+                    )
+
+                if "exit_date" in updates and updates["exit_date"] is not None:
+                    updates["exit_date"] = date.fromisoformat(
+                        updates["exit_date"]
+                    )
+
+                set_clause = ", ".join(
+                    f"{column} = %s" for column in updates
+                )
+
                 cursor.execute(
-                    f"UPDATE employees SET {set_clause}, updated_at = CURRENT_TIMESTAMP "
-                    "WHERE employee_id = %s AND is_active = TRUE RETURNING *",
+                    f"""
+                    UPDATE employees
+                    SET {set_clause}, updated_at = CURRENT_TIMESTAMP
+                    WHERE employee_id = %s AND is_active = TRUE
+                    RETURNING *
+                    """,
                     [*updates.values(), employee_id],
                 )
+
                 row = cursor.fetchone()
-                result = dict(zip([item.name for item in cursor.description], row))
+                result = dict(
+                    zip([item.name for item in cursor.description], row)
+                )
+
         return serialize_employee(result)
+
     except HTTPException:
         raise
     except psycopg.errors.UniqueViolation as exc:
-        raise HTTPException(409, "Work email already belongs to another employee.") from exc
+        raise HTTPException(
+            status_code=409,
+            detail="Work email already belongs to another employee.",
+        ) from exc
     except psycopg.errors.ForeignKeyViolation as exc:
-        raise HTTPException(422, "Department, role, or manager reference does not exist.") from exc
+        raise HTTPException(
+            status_code=422,
+            detail="Department, role, or manager reference does not exist.",
+        ) from exc
     except psycopg.Error as exc:
-        raise HTTPException(503, "Unable to update employee.") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to update employee.",
+        ) from exc
 
 
 @router.delete("/{employee_id}")

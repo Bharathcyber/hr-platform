@@ -135,6 +135,7 @@ Run tests after changes to models, migrations, routes, or services. The full tes
 - `tests/` — automated tests
 - `docs/employee-data-model.md` — employee data model diagram
 - `docs/api-contract.md` — API contract
+-- `scripts/sample_employees.json` — sample employee data
 - `data/` — generated synthetic employee data
 - `exports/` — generated CSV exports
 

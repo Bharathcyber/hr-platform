@@ -1,5 +1,5 @@
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -23,14 +23,48 @@ def get_connection():
 
 def serialize_employee(row):
     result = dict(row)
+
     for key, value in result.items():
-        if isinstance(value, (date,)):
-            result[key] = value.isoformat()
-        elif hasattr(value, "isoformat") and value.__class__.__name__ == "datetime":
+        if isinstance(value, (date, datetime)):
             result[key] = value.isoformat()
         elif isinstance(value, Decimal):
             result[key] = float(value)
+
     return result
+
+
+def validate_hire_date(hire_date):
+    if hire_date is not None and hire_date > DEMO_TODAY:
+        raise HTTPException(
+            status_code=422,
+            detail="Hire date cannot be after DEMO_TODAY.",
+        )
+
+
+def validate_employee_dates(hire_date, exit_date):
+    validate_hire_date(hire_date)
+
+    if (
+        hire_date is not None
+        and exit_date is not None
+        and exit_date < hire_date
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Exit date cannot be before hire date.",
+        )
+
+
+def validate_hire_date_range(hire_date_from, hire_date_to):
+    if (
+        hire_date_from is not None
+        and hire_date_to is not None
+        and hire_date_from > hire_date_to
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="hire_date_from cannot be after hire_date_to.",
+        )
 
 
 def list_employees(
@@ -46,17 +80,21 @@ def list_employees(
     hire_date_to: Optional[date] = None,
     q: Optional[str] = None,
 ):
+    validate_hire_date_range(hire_date_from, hire_date_to)
+
     conditions = ["is_active = TRUE"]
     values = []
 
-    for column, value in {
+    filters = {
         "department_id": department_id,
         "role_id": role_id,
         "employment_status": employment_status,
         "work_location": work_location,
         "work_mode": work_mode,
         "manager_id": manager_id,
-    }.items():
+    }
+
+    for column, value in filters.items():
         if value is not None:
             conditions.append(f"{column} = %s")
             values.append(value)
@@ -84,6 +122,7 @@ def list_employees(
         ORDER BY employee_id
         LIMIT %s OFFSET %s
     """
+
     values.extend([limit, offset])
 
     try:
@@ -91,18 +130,22 @@ def list_employees(
             with connection.cursor() as cursor:
                 cursor.execute(query, values)
                 rows = cursor.fetchall()
-                columns = [item.name for item in cursor.description]
+                columns = [
+                    item.name for item in cursor.description
+                ]
 
         employees = [
             serialize_employee(dict(zip(columns, row)))
             for row in rows
         ]
+
         return {
             "count": len(employees),
             "limit": limit,
             "offset": offset,
             "employees": employees,
         }
+
     except psycopg.Error as exc:
         raise HTTPException(
             status_code=503,
@@ -118,18 +161,23 @@ def get_direct_reports(manager_id: str):
                     """
                     SELECT *
                     FROM employees
-                    WHERE manager_id = %s AND is_active = TRUE
+                    WHERE manager_id = %s
+                      AND is_active = TRUE
                     ORDER BY employee_id
                     """,
                     (manager_id,),
                 )
+
                 rows = cursor.fetchall()
-                columns = [item.name for item in cursor.description]
+                columns = [
+                    item.name for item in cursor.description
+                ]
 
         return [
             serialize_employee(dict(zip(columns, row)))
             for row in rows
         ]
+
     except psycopg.Error as exc:
         raise HTTPException(
             status_code=503,
@@ -146,11 +194,13 @@ def soft_delete_employee(employee_id: str):
                     UPDATE employees
                     SET is_active = FALSE,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE employee_id = %s AND is_active = TRUE
+                    WHERE employee_id = %s
+                      AND is_active = TRUE
                     RETURNING employee_id
                     """,
                     (employee_id,),
                 )
+
                 row = cursor.fetchone()
 
                 if row is None:
@@ -163,8 +213,10 @@ def soft_delete_employee(employee_id: str):
             "message": "Employee deactivated successfully.",
             "employee_id": row[0],
         }
+
     except HTTPException:
         raise
+
     except psycopg.Error as exc:
         raise HTTPException(
             status_code=503,
